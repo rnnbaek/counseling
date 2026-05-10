@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>교육 · 상담 아카이브</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">🌿 상담 아카이브</a>
+  <div class="nav-links">
+    <a href="sessions.html" class="nav-link nav-auth" style="display:none">세션</a>
+    <a href="supervision.html" class="nav-link nav-auth" style="display:none">슈퍼비전</a>
+    <a href="education.html" class="nav-link active">교육</a>
+    <div class="nav-divider"></div>
+    <a href="login.html" class="nav-btn" id="nav-login">로그인</a>
+    <button class="nav-btn" id="nav-logout" style="display:none" onclick="signOut()">로그아웃</button>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="container" style="padding-top:2rem; padding-bottom:3rem;">
+    <!-- HEADER -->
+    <div class="page-header">
+      <div>
+        <h1>교육 아카이브</h1>
+        <p>교육 노트, PDF 자료, 음성 녹음을 관리하세요</p>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn btn-primary nav-auth" style="display:none" onclick="openNewPost()">+ 게시글 작성</button>
+      </div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="edu-top">
+      <div class="filter-pills" id="filter-pills">
+        <button class="filter-pill active" onclick="filterCategory('')" data-cat="">전체</button>
+        <button class="filter-pill" onclick="filterCategory('ACT')" data-cat="ACT">ACT</button>
+        <button class="filter-pill" onclick="filterCategory('DBT')" data-cat="DBT">DBT</button>
+        <button class="filter-pill" onclick="filterCategory('CBT')" data-cat="CBT">CBT</button>
+        <button class="filter-pill" onclick="filterCategory('정신역동')" data-cat="정신역동">정신역동</button>
+        <button class="filter-pill" onclick="filterCategory('기타')" data-cat="기타">기타</button>
+      </div>
+    </div>
+
+    <div id="posts-container">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- POST DETAIL MODAL -->
+<div class="modal-overlay" id="post-detail-modal">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header">
+      <div class="modal-title" id="post-detail-title"></div>
+      <button class="modal-close" onclick="closeModal('post-detail-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="post-detail-body"></div>
+    <div class="modal-footer" id="post-detail-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('post-detail-modal')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW/EDIT POST MODAL -->
+<div class="modal-overlay" id="post-edit-modal">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header">
+      <div class="modal-title" id="post-edit-title">게시글 작성</div>
+      <button class="modal-close" onclick="closeModal('post-edit-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="post-edit-id" />
+      <div class="form-group">
+        <label class="form-label">제목 *</label>
+        <input type="text" id="post-title" class="form-input" placeholder="제목을 입력하세요" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">카테고리</label>
+          <select id="post-category" class="form-select">
+            <option value="">선택</option>
+            <option>ACT</option>
+            <option>DBT</option>
+            <option>CBT</option>
+            <option>정신역동</option>
+            <option>기타</option>
+          </select>
+        </div>
+        <div class="form-group" style="display:flex; align-items:flex-end; padding-bottom:0.1rem;">
+          <div class="toggle-row">
+            <label class="toggle">
+              <input type="checkbox" id="post-is-public" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">공개 게시글</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">내용</label>
+        <textarea id="post-content" class="form-textarea" rows="10" placeholder="교육 내용을 정리해 주세요..."></textarea>
+      </div>
+
+      <!-- FILE UPLOAD -->
+      <div class="divider"></div>
+      <div style="font-size:0.82rem; font-weight:800; letter-spacing:0.02em; color:var(--text-light); margin-bottom:0.75rem; text-transform:uppercase;">파일 첨부 (Google Drive)</div>
+
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" style="display:none" accept=".pdf,audio/*" multiple onchange="handleFileSelect(this.files)" />
+        <div class="upload-zone-icon">☁️</div>
+        <p><strong>PDF 또는 음성파일</strong>을 선택하세요</p>
+        <p style="font-size:0.78rem; margin-top:0.3rem; color:var(--text-light);">Google Drive에 자동 저장됩니다</p>
+      </div>
+
+      <div id="upload-preview" style="margin-top:0.75rem;"></div>
+      <div id="existing-files" style="margin-top:0.75rem;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('post-edit-modal')">취소</button>
+      <button class="btn btn-primary" onclick="savePost()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let posts = [];
+let currentCategory = '';
+let isLoggedIn = false;
+let pendingFiles = [];
+let currentPostId = null;
+
+(async () => {
+  const session = await getSession();
+  isLoggedIn = !!session;
+  await updateNav();
+
+  if (isLoggedIn) {
+    // Init Google auth for Drive uploads
+    window.addEventListener('load', () => initGoogleAuth());
+  }
+
+  // Check URL for direct post
+  const params = new URLSearchParams(window.location.search);
+  const postId = params.get('post');
+
+  await loadPosts();
+
+  if (postId) {
+    const post = posts.find(p => p.id === postId);
+    if (post) viewPost(postId);
+  }
+})();
+
+async function loadPosts() {
+  let query = sb.from('education_posts').select('*').order('created_at', { ascending: false });
+  if (!isLoggedIn) query = query.eq('is_public', true);
+  if (currentCategory) query = query.eq('category', currentCategory);
+
+  const { data, error } = await query;
+  if (error) { showToast('로딩 실패', 'error'); return; }
+  posts = data || [];
+  renderPosts();
+}
+
+function renderPosts() {
+  const container = document.getElementById('posts-container');
+  if (posts.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div><h3>게시글이 없어요</h3><p>${isLoggedIn ? '+ 게시글 작성 버튼으로 첫 게시글을 써보세요.' : '아직 공개된 자료가 없습니다.'}</p></div>`;
+    return;
+  }
+  container.innerHTML = `<div class="posts-grid">` + posts.map(p => `
+    <div class="post-card" onclick="viewPost('${p.id}')">
+      <div class="post-card-top">
+        <h3 class="post-title">${esc(p.title)}</h3>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.3rem; flex-shrink:0;">
+          ${p.category ? `<span class="badge badge-green">${esc(p.category)}</span>` : ''}
+          ${isLoggedIn && !p.is_public ? `<span class="badge badge-gray">비공개</span>` : ''}
+        </div>
+      </div>
+      <p class="post-meta">${formatDate(p.created_at)}</p>
+      <p class="post-preview">${esc(p.content || '').substring(0, 150)}${(p.content || '').length > 150 ? '…' : ''}</p>
+      <div class="post-foot">
+        ${p.tags ? p.tags.map(t => `<span class="badge badge-blue">${esc(t)}</span>`).join('') : ''}
+      </div>
+    </div>
+  `).join('') + `</div>`;
+}
+
+function filterCategory(cat) {
+  currentCategory = cat;
+  document.querySelectorAll('.filter-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.cat === cat);
+  });
+  loadPosts();
+}
+
+async function viewPost(id) {
+  currentPostId = id;
+  const post = posts.find(p => p.id === id);
+  if (!post) return;
+
+  document.getElementById('post-detail-title').textContent = post.title;
+
+  // Load files
+  const { data: files } = await sb.from('education_files').select('*').eq('post_id', id);
+
+  let filesHtml = '';
+  if (files && files.length > 0) {
+    const visibleFiles = isLoggedIn ? files : files.filter(f => f.is_public);
+    if (visibleFiles.length > 0) {
+      filesHtml = `
+        <div class="divider"></div>
+        <div class="detail-label" style="margin-bottom:0.75rem;">첨부 파일</div>
+        <div class="file-list">
+          ${visibleFiles.map(f => `
+            <div class="file-item">
+              <div class="file-icon ${f.file_type}">${f.file_type === 'pdf' ? '📄' : '🎵'}</div>
+              <div class="file-info">
+                <div class="file-name">${esc(f.file_name)}</div>
+                ${f.transcript ? `<div class="file-size">전사문 있음</div>` : ''}
+              </div>
+              <div class="file-actions">
+                <a href="${esc(f.file_url)}" target="_blank" class="btn btn-ghost btn-sm">열기</a>
+              </div>
+            </div>
+            ${f.transcript ? `
+              <div style="margin-left:0.5rem; margin-bottom:0.5rem;">
+                <div class="detail-label" style="font-size:0.7rem;">전사문</div>
+                <div class="transcript-box">${esc(f.transcript)}</div>
+              </div>
+            ` : ''}
+          `).join('')}
+        </div>
+      `;
+    }
+  }
+
+  document.getElementById('post-detail-body').innerHTML = `
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+      ${post.category ? `<span class="badge badge-green">${esc(post.category)}</span>` : ''}
+      ${isLoggedIn && !post.is_public ? `<span class="badge badge-gray">비공개</span>` : ''}
+    </div>
+    <p style="font-size:0.8rem; color:var(--text-light); margin-bottom:1.25rem;">${formatDate(post.created_at)}</p>
+    <div class="detail-content" style="font-size:0.95rem;">${esc(post.content || '').replace(/\n/g, '<br>')}</div>
+    ${filesHtml}
+  `;
+
+  const footer = document.getElementById('post-detail-footer');
+  if (isLoggedIn) {
+    footer.innerHTML = `
+      <button class="btn btn-danger btn-sm" onclick="confirmDeletePost('${post.id}')">삭제</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('post-detail-modal')">닫기</button>
+      <button class="btn btn-primary btn-sm" onclick="closeModal('post-detail-modal'); editPost('${post.id}')">수정</button>
+    `;
+  } else {
+    footer.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="closeModal('post-detail-modal')">닫기</button>`;
+  }
+
+  openModal('post-detail-modal');
+}
+
+function openNewPost() {
+  resetPostForm();
+  openModal('post-edit-modal');
+}
+
+async function editPost(id) {
+  const post = posts.find(p => p.id === id);
+  if (!post) return;
+
+  document.getElementById('post-edit-title').textContent = '게시글 수정';
+  document.getElementById('post-edit-id').value = post.id;
+  document.getElementById('post-title').value = post.title;
+  document.getElementById('post-category').value = post.category || '';
+  document.getElementById('post-is-public').checked = post.is_public;
+  document.getElementById('post-content').value = post.content || '';
+
+  // Load existing files
+  const { data: files } = await sb.from('education_files').select('*').eq('post_id', id);
+  renderExistingFiles(files || []);
+
+  openModal('post-edit-modal');
+}
+
+function renderExistingFiles(files) {
+  const container = document.getElementById('existing-files');
+  if (!files || files.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div style="font-size:0.78rem; font-weight:700; color:var(--text-light); margin-bottom:0.5rem;">기존 파일</div>
+    <div class="file-list">
+      ${files.map(f => `
+        <div class="file-item">
+          <div class="file-icon ${f.file_type}">${f.file_type === 'pdf' ? '📄' : '🎵'}</div>
+          <div class="file-info">
+            <div class="file-name">${esc(f.file_name)}</div>
+          </div>
+          <div class="file-actions">
+            <a href="${esc(f.file_url)}" target="_blank" class="btn btn-ghost btn-sm">열기</a>
+            <button class="btn btn-danger btn-sm" onclick="deleteFile('${f.id}', this)">삭제</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+async function deleteFile(id, btn) {
+  if (!confirm('파일을 삭제하시겠습니까?')) return;
+  const { error } = await sb.from('education_files').delete().eq('id', id);
+  if (error) { showToast('삭제 실패', 'error'); return; }
+  btn.closest('.file-item').remove();
+  showToast('파일이 삭제되었습니다');
+}
+
+function handleFileSelect(files) {
+  for (const file of files) {
+    pendingFiles.push(file);
+  }
+  renderUploadPreview();
+}
+
+function renderUploadPreview() {
+  const container = document.getElementById('upload-preview');
+  if (pendingFiles.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div style="font-size:0.78rem; font-weight:700; color:var(--text-light); margin-bottom:0.5rem;">업로드 대기 중</div>
+    <div class="file-list">
+      ${pendingFiles.map((f, i) => `
+        <div class="file-item">
+          <div class="file-icon ${f.type.includes('pdf') ? 'pdf' : 'audio'}">${f.type.includes('pdf') ? '📄' : '🎵'}</div>
+          <div class="file-info">
+            <div class="file-name">${esc(f.name)}</div>
+            <div class="file-size">${(f.size / 1024 / 1024).toFixed(1)} MB</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="removePendingFile(${i})">제거</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function removePendingFile(index) {
+  pendingFiles.splice(index, 1);
+  renderUploadPreview();
+}
+
+async function savePost() {
+  const editId = document.getElementById('post-edit-id').value;
+  const title = document.getElementById('post-title').value.trim();
+  if (!title) { showToast('제목을 입력하세요', 'error'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  const isPublic = document.getElementById('post-is-public').checked;
+
+  const payload = {
+    user_id: user.id,
+    title,
+    category: document.getElementById('post-category').value || null,
+    content: document.getElementById('post-content').value,
+    is_public: isPublic,
+  };
+
+  let postId = editId;
+  let error;
+
+  if (editId) {
+    ({ error } = await sb.from('education_posts').update(payload).eq('id', editId));
+  } else {
+    const { data: newPost, error: insertError } = await sb.from('education_posts').insert(payload).select().single();
+    error = insertError;
+    if (newPost) postId = newPost.id;
+  }
+
+  if (error) { showToast('저장 실패: ' + error.message, 'error'); return; }
+
+  // Upload pending files to Google Drive
+  if (pendingFiles.length > 0 && postId) {
+    showToast('파일을 Google Drive에 업로드 중...', 'default');
+    for (const file of pendingFiles) {
+      try {
+        const driveFile = await uploadToDrive(file);
+        const fileType = file.type.includes('pdf') ? 'pdf' : file.type.includes('audio') ? 'audio' : 'other';
+        await sb.from('education_files').insert({
+          post_id: postId,
+          user_id: user.id,
+          file_name: file.name,
+          file_url: driveFile.webViewLink,
+          drive_file_id: driveFile.id,
+          file_type: fileType,
+          is_public: isPublic,
+        });
+      } catch (err) {
+        showToast(`파일 업로드 실패: ${file.name}`, 'error');
+      }
+    }
+    pendingFiles = [];
+  }
+
+  showToast(editId ? '수정되었습니다' : '게시글이 저장되었습니다', 'success');
+  closeModal('post-edit-modal');
+  resetPostForm();
+  await loadPosts();
+}
+
+function resetPostForm() {
+  document.getElementById('post-edit-id').value = '';
+  document.getElementById('post-edit-title').textContent = '게시글 작성';
+  document.getElementById('post-title').value = '';
+  document.getElementById('post-category').value = '';
+  document.getElementById('post-is-public').checked = false;
+  document.getElementById('post-content').value = '';
+  document.getElementById('upload-preview').innerHTML = '';
+  document.getElementById('existing-files').innerHTML = '';
+  document.getElementById('file-input').value = '';
+  pendingFiles = [];
+}
+
+async function confirmDeletePost(id) {
+  if (!confirm('이 게시글을 삭제하시겠습니까? 첨부 파일 링크도 함께 삭제됩니다.')) return;
+  // Delete files first
+  await sb.from('education_files').delete().eq('post_id', id);
+  const { error } = await sb.from('education_posts').delete().eq('id', id);
+  if (error) { showToast('삭제 실패', 'error'); return; }
+  showToast('삭제되었습니다');
+  closeModal('post-detail-modal');
+  await loadPosts();
+}
+
+// Drag and drop
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--primary)'; });
+uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.style.borderColor = '';
+  handleFileSelect(e.dataTransfer.files);
+});
+</script>
+</body>
+</html>

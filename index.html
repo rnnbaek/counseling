@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>상담 아카이브</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">🌿 상담 아카이브</a>
+  <div class="nav-links">
+    <a href="education.html" class="nav-link">교육 자료</a>
+    <div class="nav-divider"></div>
+    <a href="sessions.html" class="nav-link nav-auth" style="display:none">세션</a>
+    <a href="supervision.html" class="nav-link nav-auth" style="display:none">슈퍼비전</a>
+    <a href="login.html" class="nav-btn" id="nav-login">로그인</a>
+    <button class="nav-btn" id="nav-logout" style="display:none" onclick="signOut()">로그아웃</button>
+  </div>
+</nav>
+
+<div class="page">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">상담사를 위한 개인 아카이브</div>
+      <h1>성장하는 상담사를 위한<br><span>기록과 성찰의 공간</span></h1>
+      <p class="hero-desc">상담 회기, 슈퍼비전, 교육 자료를 한 곳에서<br>체계적으로 관리하고 성장을 기록하세요.</p>
+      <div class="hero-actions">
+        <a href="login.html" class="btn btn-primary" id="hero-cta">시작하기 →</a>
+        <a href="education.html" class="btn btn-outline">교육 자료 보기</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section section-alt">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">주요 기능</h2>
+        <p class="section-sub">상담사의 전문적 성장을 위한 세 가지 핵심 영역</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📋</div>
+          <h3>상담 세션 기록</h3>
+          <p>내담자별로 회기를 체계적으로 기록하고 관리하세요. 회기 내용, 목표, 과제를 한눈에 확인할 수 있습니다.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3>슈퍼비전 노트</h3>
+          <p>상담 회기와 연결된 슈퍼비전 내용을 기록하고, 슈퍼바이저의 피드백을 체계적으로 정리하세요.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📚</div>
+          <h3>교육 아카이브</h3>
+          <p>ACT, DBT 등 다양한 교육 내용을 정리하고, PDF 자료와 음성 녹음을 Google Drive에 보관하세요.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PUBLIC POSTS -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header" style="display:flex; align-items:flex-end; justify-content:space-between;">
+        <div>
+          <h2 class="section-title">공개 교육 자료</h2>
+          <p class="section-sub">공유된 교육 노트와 자료</p>
+        </div>
+        <a href="education.html" class="btn btn-ghost btn-sm">전체 보기 →</a>
+      </div>
+      <div id="public-posts" class="posts-grid">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer class="footer">
+  <div class="container">
+    <p>🌿 상담 아카이브 · 개인 관리 시스템</p>
+  </div>
+</footer>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+(async () => {
+  await updateNav();
+  const session = await getSession();
+  if (session) {
+    document.getElementById('hero-cta').textContent = '대시보드 →';
+    document.getElementById('hero-cta').href = 'sessions.html';
+  }
+
+  const { data: posts, error } = await sb
+    .from('education_posts')
+    .select('*')
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  const container = document.getElementById('public-posts');
+  if (!posts || posts.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📭</div><p>아직 공개된 자료가 없습니다.</p></div>`;
+    return;
+  }
+  container.innerHTML = posts.map(p => `
+    <div class="post-card" onclick="location.href='education.html?post=${p.id}'">
+      <div class="post-card-top">
+        <h3 class="post-title">${esc(p.title)}</h3>
+        ${p.category ? `<span class="badge badge-green">${esc(p.category)}</span>` : ''}
+      </div>
+      <p class="post-meta">${formatDateShort(p.created_at)}</p>
+      <p class="post-preview">${esc(p.content || '').substring(0, 120)}${(p.content || '').length > 120 ? '…' : ''}</p>
+    </div>
+  `).join('');
+})();
+</script>
+</body>
+</html>

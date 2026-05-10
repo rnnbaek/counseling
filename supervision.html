@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>슈퍼비전 · 상담 아카이브</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">🌿 상담 아카이브</a>
+  <div class="nav-links">
+    <a href="sessions.html" class="nav-link">세션</a>
+    <a href="supervision.html" class="nav-link active">슈퍼비전</a>
+    <a href="education.html" class="nav-link">교육</a>
+    <div class="nav-divider"></div>
+    <button class="nav-btn" onclick="signOut()">로그아웃</button>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="container" style="padding-top:2rem; padding-bottom:3rem;">
+    <div class="page-header">
+      <div>
+        <h1>슈퍼비전</h1>
+        <p>내담자별 슈퍼비전 기록</p>
+      </div>
+      <div class="page-header-actions">
+        <select id="filter-client" class="form-select" style="width:160px; font-size:0.85rem;" onchange="filterByClient()">
+          <option value="">전체 내담자</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="exportSupervisions()">📥 내보내기</button>
+        <button class="btn btn-primary" onclick="openAddSupervision()">+ 슈퍼비전 추가</button>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="stat-value" id="stat-total">-</div><div class="stat-label">전체 슈퍼비전</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-clients">-</div><div class="stat-label">슈퍼비전 받은 내담자</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-recent">-</div><div class="stat-label">최근 30일</div></div>
+    </div>
+
+    <div id="supervision-list">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD SUPERVISION MODAL -->
+<div class="modal-overlay" id="add-supervision-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="supervision-modal-title">슈퍼비전 추가</div>
+      <button class="modal-close" onclick="closeModal('add-supervision-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="supervision-edit-id" />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">내담자 *</label>
+          <select id="supervision-client" class="form-select" onchange="loadSessionsForSupervision()">
+            <option value="">내담자 선택</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">관련 회기</label>
+          <select id="supervision-session" class="form-select">
+            <option value="">회기 선택 (선택사항)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">날짜 *</label>
+          <input type="date" id="supervision-date" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">슈퍼바이저</label>
+          <input type="text" id="supervision-supervisor" class="form-input" placeholder="슈퍼바이저 이름" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">슈퍼비전 내용</label>
+        <textarea id="supervision-content" class="form-textarea" rows="5" placeholder="슈퍼비전에서 다룬 내용을 적어주세요."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">피드백</label>
+        <textarea id="supervision-feedback" class="form-textarea" rows="3" placeholder="슈퍼바이저의 피드백"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">실행 항목</label>
+        <textarea id="supervision-actions" class="form-textarea" rows="2" placeholder="다음에 적용할 사항, 변화 계획"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('add-supervision-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveSupervision()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIEW SUPERVISION MODAL -->
+<div class="modal-overlay" id="view-supervision-modal">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header">
+      <div class="modal-title" id="view-supervision-title">슈퍼비전 상세</div>
+      <button class="modal-close" onclick="closeModal('view-supervision-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="view-supervision-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="delete-supervision-btn">삭제</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('view-supervision-modal')">닫기</button>
+      <button class="btn btn-primary btn-sm" id="edit-supervision-btn">수정</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let supervisions = [];
+let clients = [];
+let currentFilterClientId = '';
+let currentSupervisionId = null;
+
+(async () => {
+  const session = await requireAuth();
+  if (!session) return;
+  await Promise.all([loadClients(), loadSupervisions()]);
+  document.getElementById('supervision-date').value = new Date().toISOString().split('T')[0];
+})();
+
+async function loadClients() {
+  const { data } = await sb.from('clients').select('id,name').order('name');
+  clients = data || [];
+  const selects = ['filter-client', 'supervision-client'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    const firstOpt = el.options[0];
+    el.innerHTML = '';
+    el.appendChild(firstOpt);
+    clients.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name;
+      el.appendChild(opt);
+    });
+  });
+}
+
+async function loadSupervisions(filterClientId = '') {
+  let query = sb.from('supervisions')
+    .select('*, clients(name), sessions(session_number, date)')
+    .order('date', { ascending: false });
+  if (filterClientId) query = query.eq('client_id', filterClientId);
+  const { data, error } = await query;
+  if (error) { showToast('로딩 실패', 'error'); return; }
+  supervisions = data || [];
+  renderSupervisions();
+  updateStats();
+}
+
+function updateStats() {
+  document.getElementById('stat-total').textContent = supervisions.length;
+  const clientIds = new Set(supervisions.map(s => s.client_id).filter(Boolean));
+  document.getElementById('stat-clients').textContent = clientIds.size;
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const recent = supervisions.filter(s => new Date(s.date) >= thirtyDaysAgo);
+  document.getElementById('stat-recent').textContent = recent.length;
+}
+
+function renderSupervisions() {
+  const list = document.getElementById('supervision-list');
+  if (supervisions.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">💬</div><h3>슈퍼비전 기록이 없어요</h3><p>+ 슈퍼비전 추가 버튼으로 기록을 시작하세요.</p></div>`;
+    return;
+  }
+  list.innerHTML = `<div class="supervision-list">` + supervisions.map(s => `
+    <div class="supervision-card" onclick="viewSupervision('${s.id}')">
+      <div class="supervision-top">
+        <div>
+          ${s.clients ? `<div class="supervision-client">👤 ${esc(s.clients.name)}</div>` : ''}
+          ${s.sessions ? `<div style="font-size:0.78rem; color:var(--text-light); margin-top:0.2rem;">${s.sessions.session_number}회기 · ${formatDateShort(s.sessions.date)}</div>` : ''}
+        </div>
+        <div style="text-align:right;">
+          <div class="supervision-date">${formatDate(s.date)}</div>
+          ${s.supervisor_name ? `<div class="supervision-supervisor">${esc(s.supervisor_name)}</div>` : ''}
+        </div>
+      </div>
+      <div class="supervision-preview">${esc(s.content || '내용 없음')}</div>
+    </div>
+  `).join('') + `</div>`;
+}
+
+function filterByClient() {
+  currentFilterClientId = document.getElementById('filter-client').value;
+  loadSupervisions(currentFilterClientId);
+}
+
+function viewSupervision(id) {
+  currentSupervisionId = id;
+  const s = supervisions.find(x => x.id === id);
+  if (!s) return;
+
+  document.getElementById('view-supervision-title').textContent =
+    `슈퍼비전 · ${formatDate(s.date)}${s.clients ? ' · ' + s.clients.name : ''}`;
+
+  document.getElementById('view-supervision-body').innerHTML = `
+    ${s.clients ? field('내담자', s.clients.name) : ''}
+    ${s.sessions ? field('관련 회기', `${s.sessions.session_number}회기 (${formatDate(s.sessions.date)})`) : ''}
+    ${field('슈퍼바이저', s.supervisor_name)}
+    ${field('슈퍼비전 내용', s.content)}
+    ${field('피드백', s.feedback)}
+    ${field('실행 항목', s.action_items)}
+  `;
+
+  document.getElementById('edit-supervision-btn').onclick = () => { closeModal('view-supervision-modal'); editSupervision(s); };
+  document.getElementById('delete-supervision-btn').onclick = () => confirmDelete(id);
+  openModal('view-supervision-modal');
+}
+
+function field(label, value) {
+  if (!value) return '';
+  return `<div class="detail-section"><div class="detail-label">${label}</div><div class="detail-content">${esc(value)}</div></div>`;
+}
+
+async function loadSessionsForSupervision() {
+  const clientId = document.getElementById('supervision-client').value;
+  const select = document.getElementById('supervision-session');
+  select.innerHTML = '<option value="">회기 선택 (선택사항)</option>';
+  if (!clientId) return;
+  const { data } = await sb.from('sessions').select('id, session_number, date').eq('client_id', clientId).order('session_number', { ascending: false });
+  (data || []).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `${s.session_number}회기 (${formatDateShort(s.date)})`;
+    select.appendChild(opt);
+  });
+}
+
+function openAddSupervision() {
+  resetSupervisionForm();
+  openModal('add-supervision-modal');
+}
+
+function editSupervision(s) {
+  document.getElementById('supervision-modal-title').textContent = '슈퍼비전 수정';
+  document.getElementById('supervision-edit-id').value = s.id;
+  document.getElementById('supervision-client').value = s.client_id || '';
+  loadSessionsForSupervision().then(() => {
+    document.getElementById('supervision-session').value = s.session_id || '';
+  });
+  document.getElementById('supervision-date').value = s.date;
+  document.getElementById('supervision-supervisor').value = s.supervisor_name || '';
+  document.getElementById('supervision-content').value = s.content || '';
+  document.getElementById('supervision-feedback').value = s.feedback || '';
+  document.getElementById('supervision-actions').value = s.action_items || '';
+  openModal('add-supervision-modal');
+}
+
+async function saveSupervision() {
+  const editId = document.getElementById('supervision-edit-id').value;
+  const date = document.getElementById('supervision-date').value;
+  if (!date) { showToast('날짜를 입력하세요', 'error'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  const clientId = document.getElementById('supervision-client').value;
+  const sessionId = document.getElementById('supervision-session').value;
+
+  const payload = {
+    user_id: user.id,
+    client_id: clientId || null,
+    session_id: sessionId || null,
+    date,
+    supervisor_name: document.getElementById('supervision-supervisor').value,
+    content: document.getElementById('supervision-content').value,
+    feedback: document.getElementById('supervision-feedback').value,
+    action_items: document.getElementById('supervision-actions').value,
+  };
+
+  let error;
+  if (editId) {
+    ({ error } = await sb.from('supervisions').update(payload).eq('id', editId));
+  } else {
+    ({ error } = await sb.from('supervisions').insert(payload));
+  }
+
+  if (error) { showToast('저장 실패: ' + error.message, 'error'); return; }
+  showToast(editId ? '수정되었습니다' : '저장되었습니다', 'success');
+  closeModal('add-supervision-modal');
+  resetSupervisionForm();
+  await loadSupervisions(currentFilterClientId);
+}
+
+function resetSupervisionForm() {
+  document.getElementById('supervision-edit-id').value = '';
+  document.getElementById('supervision-modal-title').textContent = '슈퍼비전 추가';
+  document.getElementById('supervision-client').value = '';
+  document.getElementById('supervision-session').innerHTML = '<option value="">회기 선택 (선택사항)</option>';
+  document.getElementById('supervision-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('supervision-supervisor').value = '';
+  document.getElementById('supervision-content').value = '';
+  document.getElementById('supervision-feedback').value = '';
+  document.getElementById('supervision-actions').value = '';
+}
+
+async function confirmDelete(id) {
+  if (!confirm('이 슈퍼비전 기록을 삭제하시겠습니까?')) return;
+  const { error } = await sb.from('supervisions').delete().eq('id', id);
+  if (error) { showToast('삭제 실패', 'error'); return; }
+  showToast('삭제되었습니다');
+  closeModal('view-supervision-modal');
+  await loadSupervisions(currentFilterClientId);
+}
+
+async function exportSupervisions() {
+  if (supervisions.length === 0) { showToast('내보낼 데이터가 없습니다', 'error'); return; }
+  const rows = supervisions.map(s => ({
+    날짜: s.date,
+    내담자: s.clients?.name || '',
+    관련회기: s.sessions ? `${s.sessions.session_number}회기` : '',
+    슈퍼바이저: s.supervisor_name || '',
+    내용: s.content || '',
+    피드백: s.feedback || '',
+    실행항목: s.action_items || ''
+  }));
+  await exportToExcel(rows, '슈퍼비전_' + new Date().toISOString().slice(0,10));
+  showToast('엑셀 파일이 다운로드됩니다', 'success');
+}
+</script>
+</body>
+</html>

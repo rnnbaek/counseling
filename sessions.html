@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>상담 세션 · 상담 아카이브</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">🌿 상담 아카이브</a>
+  <div class="nav-links">
+    <a href="sessions.html" class="nav-link active">세션</a>
+    <a href="supervision.html" class="nav-link">슈퍼비전</a>
+    <a href="education.html" class="nav-link">교육</a>
+    <div class="nav-divider"></div>
+    <button class="nav-btn" onclick="signOut()">로그아웃</button>
+  </div>
+</nav>
+
+<div style="padding-top: var(--nav-height);">
+  <div class="app-page">
+    <!-- CLIENT SIDEBAR -->
+    <div class="client-sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">내담자</span>
+        <button class="btn btn-primary btn-sm" onclick="openModal('add-client-modal')">+ 추가</button>
+      </div>
+      <div class="client-list" id="client-list">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+      <div style="padding: 0.75rem; border-top: 1px solid var(--border);">
+        <button class="btn btn-ghost btn-sm" style="width:100%; justify-content:center;" onclick="exportClients()">📥 엑셀 내보내기</button>
+      </div>
+    </div>
+
+    <!-- MAIN PANEL -->
+    <div class="main-panel">
+      <div class="panel-header" id="session-panel-header">
+        <div>
+          <div class="panel-title" id="selected-client-name">내담자를 선택하세요</div>
+          <div style="font-size:0.78rem; color:var(--text-light);" id="selected-client-meta"></div>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <button class="btn btn-ghost btn-sm" id="edit-client-btn" style="display:none" onclick="editClient()">✏️ 내담자 수정</button>
+          <button class="btn btn-primary btn-sm" id="add-session-btn" style="display:none" onclick="openModal('add-session-modal')">+ 회기 추가</button>
+        </div>
+      </div>
+      <div class="panel-body" id="session-panel-body">
+        <div class="empty-state">
+          <div class="empty-icon">👈</div>
+          <h3>내담자를 선택하세요</h3>
+          <p>왼쪽에서 내담자를 선택하거나<br>새 내담자를 추가하세요.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SESSION DETAIL PANEL (slides in) -->
+<div class="modal-overlay" id="session-detail-modal">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header">
+      <div class="modal-title" id="detail-title">회기 상세</div>
+      <button class="modal-close" onclick="closeModal('session-detail-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="session-detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="delete-session-btn">삭제</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('session-detail-modal')">닫기</button>
+      <button class="btn btn-primary btn-sm" id="edit-session-btn">수정</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD CLIENT MODAL -->
+<div class="modal-overlay" id="add-client-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="client-modal-title">내담자 추가</div>
+      <button class="modal-close" onclick="closeModal('add-client-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="client-edit-id" />
+      <div class="form-group">
+        <label class="form-label">이름 / 코드명 *</label>
+        <input type="text" id="client-name" class="form-input" placeholder="예: 홍길동 또는 A씨" required />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">상담 시작일</label>
+          <input type="date" id="client-start-date" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">상태</label>
+          <select id="client-status" class="form-select">
+            <option value="active">진행 중</option>
+            <option value="ended">종결</option>
+            <option value="paused">중단</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">주 호소 문제</label>
+        <input type="text" id="client-issue" class="form-input" placeholder="예: 불안, 우울, 관계 문제" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">메모</label>
+        <textarea id="client-notes" class="form-textarea" rows="3" placeholder="추가 메모"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('add-client-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveClient()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD SESSION MODAL -->
+<div class="modal-overlay" id="add-session-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="session-modal-title">회기 추가</div>
+      <button class="modal-close" onclick="closeModal('add-session-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="session-edit-id" />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">회기 번호 *</label>
+          <input type="number" id="session-number" class="form-input" min="1" placeholder="예: 1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">날짜 *</label>
+          <input type="date" id="session-date" class="form-input" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">회기 내용</label>
+        <textarea id="session-content" class="form-textarea" rows="5" placeholder="이번 회기에서 다룬 내용을 적어주세요."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">목표 / 계획</label>
+        <textarea id="session-goals" class="form-textarea" rows="3" placeholder="이번 회기 목표 또는 다음 회기 계획"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">과제</label>
+        <textarea id="session-homework" class="form-textarea" rows="2" placeholder="내담자에게 부여한 과제"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">상담사 메모 (비공개)</label>
+        <textarea id="session-therapist-notes" class="form-textarea" rows="2" placeholder="개인적인 관찰이나 메모"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('add-session-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveSession()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let currentClientId = null;
+let currentSessionId = null;
+let clients = [];
+let sessions = [];
+
+// INIT
+(async () => {
+  const session = await requireAuth();
+  if (!session) return;
+  await loadClients();
+  // Set today's date as default
+  document.getElementById('session-date').value = new Date().toISOString().split('T')[0];
+})();
+
+// CLIENTS
+async function loadClients() {
+  const { data, error } = await sb.from('clients').select('*').order('created_at', { ascending: false });
+  if (error) { showToast('내담자 로딩 실패', 'error'); return; }
+  clients = data || [];
+  renderClients();
+}
+
+function renderClients() {
+  const list = document.getElementById('client-list');
+  if (clients.length === 0) {
+    list.innerHTML = `<div class="empty-state" style="padding:2rem 1rem;"><div class="empty-icon" style="font-size:1.75rem;">👤</div><p style="font-size:0.8rem;">내담자를 추가하세요</p></div>`;
+    return;
+  }
+  list.innerHTML = clients.map(c => `
+    <button class="client-item ${c.id === currentClientId ? 'active' : ''}" onclick="selectClient('${c.id}')">
+      <div class="client-avatar">${getInitials(c.name)}</div>
+      <div class="client-info">
+        <div class="client-name">${esc(c.name)}</div>
+        <div class="client-meta">${statusLabel(c.status)} ${c.start_date ? '· ' + formatDateShort(c.start_date) + ' 시작' : ''}</div>
+      </div>
+    </button>
+  `).join('');
+}
+
+function statusLabel(s) {
+  const map = { active: '진행 중', ended: '종결', paused: '중단' };
+  return map[s] || s;
+}
+
+async function selectClient(id) {
+  currentClientId = id;
+  renderClients();
+  const client = clients.find(c => c.id === id);
+  if (!client) return;
+
+  document.getElementById('selected-client-name').textContent = client.name;
+  document.getElementById('selected-client-meta').textContent =
+    `${statusLabel(client.status)}${client.start_date ? ' · ' + formatDate(client.start_date) + ' 시작' : ''}${client.presenting_issue ? ' · ' + client.presenting_issue : ''}`;
+  document.getElementById('add-session-btn').style.display = 'inline-flex';
+  document.getElementById('edit-client-btn').style.display = 'inline-flex';
+
+  await loadSessions(id);
+}
+
+async function loadSessions(clientId) {
+  const body = document.getElementById('session-panel-body');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  const { data, error } = await sb.from('sessions')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('session_number', { ascending: false });
+
+  if (error) { showToast('회기 로딩 실패', 'error'); return; }
+  sessions = data || [];
+  renderSessions();
+}
+
+function renderSessions() {
+  const body = document.getElementById('session-panel-body');
+  if (sessions.length === 0) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>아직 회기가 없어요</h3><p>+ 회기 추가 버튼으로 첫 회기를 기록하세요.</p></div>`;
+    return;
+  }
+  body.innerHTML = sessions.map(s => `
+    <div class="session-card" onclick="viewSession('${s.id}')">
+      <div class="session-card-top">
+        <span class="session-num">${s.session_number}회기</span>
+        <span class="session-date">${formatDate(s.date)}</span>
+      </div>
+      <div class="session-preview">${esc(s.content || '내용 없음')}</div>
+    </div>
+  `).join('');
+}
+
+function viewSession(id) {
+  currentSessionId = id;
+  const s = sessions.find(x => x.id === id);
+  if (!s) return;
+
+  document.getElementById('detail-title').textContent = `${s.session_number}회기 · ${formatDate(s.date)}`;
+  document.getElementById('session-detail-body').innerHTML = `
+    ${field('회기 내용', s.content)}
+    ${field('목표 / 계획', s.goals)}
+    ${field('과제', s.homework)}
+    ${field('상담사 메모', s.therapist_notes)}
+  `;
+  document.getElementById('edit-session-btn').onclick = () => { closeModal('session-detail-modal'); editSession(s); };
+  document.getElementById('delete-session-btn').onclick = () => confirmDeleteSession(id);
+  openModal('session-detail-modal');
+}
+
+function field(label, value) {
+  if (!value) return '';
+  return `<div class="detail-section"><div class="detail-label">${label}</div><div class="detail-content">${esc(value)}</div></div>`;
+}
+
+function editSession(s) {
+  document.getElementById('session-modal-title').textContent = '회기 수정';
+  document.getElementById('session-edit-id').value = s.id;
+  document.getElementById('session-number').value = s.session_number;
+  document.getElementById('session-date').value = s.date;
+  document.getElementById('session-content').value = s.content || '';
+  document.getElementById('session-goals').value = s.goals || '';
+  document.getElementById('session-homework').value = s.homework || '';
+  document.getElementById('session-therapist-notes').value = s.therapist_notes || '';
+  openModal('add-session-modal');
+}
+
+async function saveSession() {
+  const editId = document.getElementById('session-edit-id').value;
+  const num = parseInt(document.getElementById('session-number').value);
+  const date = document.getElementById('session-date').value;
+  if (!num || !date) { showToast('회기 번호와 날짜를 입력하세요', 'error'); return; }
+
+  const payload = {
+    client_id: currentClientId,
+    session_number: num,
+    date,
+    content: document.getElementById('session-content').value,
+    goals: document.getElementById('session-goals').value,
+    homework: document.getElementById('session-homework').value,
+    therapist_notes: document.getElementById('session-therapist-notes').value,
+  };
+
+  let error;
+  if (editId) {
+    ({ error } = await sb.from('sessions').update(payload).eq('id', editId));
+  } else {
+    ({ error } = await sb.from('sessions').insert(payload));
+  }
+
+  if (error) { showToast('저장 실패: ' + error.message, 'error'); return; }
+  showToast(editId ? '회기가 수정되었습니다' : '회기가 저장되었습니다', 'success');
+  closeModal('add-session-modal');
+  resetSessionForm();
+  await loadSessions(currentClientId);
+}
+
+function resetSessionForm() {
+  document.getElementById('session-edit-id').value = '';
+  document.getElementById('session-modal-title').textContent = '회기 추가';
+  document.getElementById('session-number').value = '';
+  document.getElementById('session-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('session-content').value = '';
+  document.getElementById('session-goals').value = '';
+  document.getElementById('session-homework').value = '';
+  document.getElementById('session-therapist-notes').value = '';
+}
+
+async function confirmDeleteSession(id) {
+  if (!confirm('이 회기를 삭제하시겠습니까?')) return;
+  const { error } = await sb.from('sessions').delete().eq('id', id);
+  if (error) { showToast('삭제 실패', 'error'); return; }
+  showToast('회기가 삭제되었습니다');
+  closeModal('session-detail-modal');
+  await loadSessions(currentClientId);
+}
+
+// CLIENT CRUD
+async function saveClient() {
+  const editId = document.getElementById('client-edit-id').value;
+  const name = document.getElementById('client-name').value.trim();
+  if (!name) { showToast('이름을 입력하세요', 'error'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  const payload = {
+    user_id: user.id,
+    name,
+    start_date: document.getElementById('client-start-date').value || null,
+    status: document.getElementById('client-status').value,
+    presenting_issue: document.getElementById('client-issue').value,
+    notes: document.getElementById('client-notes').value,
+  };
+
+  let error;
+  if (editId) {
+    ({ error } = await sb.from('clients').update(payload).eq('id', editId));
+  } else {
+    ({ error } = await sb.from('clients').insert(payload));
+  }
+
+  if (error) { showToast('저장 실패: ' + error.message, 'error'); return; }
+  showToast(editId ? '내담자 정보가 수정되었습니다' : '내담자가 추가되었습니다', 'success');
+  closeModal('add-client-modal');
+  resetClientForm();
+  await loadClients();
+}
+
+function resetClientForm() {
+  document.getElementById('client-edit-id').value = '';
+  document.getElementById('client-modal-title').textContent = '내담자 추가';
+  document.getElementById('client-name').value = '';
+  document.getElementById('client-start-date').value = '';
+  document.getElementById('client-status').value = 'active';
+  document.getElementById('client-issue').value = '';
+  document.getElementById('client-notes').value = '';
+}
+
+function editClient() {
+  const c = clients.find(x => x.id === currentClientId);
+  if (!c) return;
+  document.getElementById('client-modal-title').textContent = '내담자 수정';
+  document.getElementById('client-edit-id').value = c.id;
+  document.getElementById('client-name').value = c.name;
+  document.getElementById('client-start-date').value = c.start_date || '';
+  document.getElementById('client-status').value = c.status || 'active';
+  document.getElementById('client-issue').value = c.presenting_issue || '';
+  document.getElementById('client-notes').value = c.notes || '';
+  openModal('add-client-modal');
+}
+
+// EXPORT
+async function exportClients() {
+  if (clients.length === 0) { showToast('내보낼 데이터가 없습니다', 'error'); return; }
+  const rows = [];
+  for (const c of clients) {
+    const { data: sess } = await sb.from('sessions').select('*').eq('client_id', c.id).order('session_number');
+    if (!sess || sess.length === 0) {
+      rows.push({ 내담자: c.name, 상태: statusLabel(c.status), 시작일: c.start_date || '', 회기번호: '', 날짜: '', 내용: '', 목표: '', 과제: '' });
+    } else {
+      sess.forEach(s => rows.push({
+        내담자: c.name, 상태: statusLabel(c.status), 시작일: c.start_date || '',
+        회기번호: s.session_number, 날짜: s.date, 내용: s.content || '', 목표: s.goals || '', 과제: s.homework || ''
+      }));
+    }
+  }
+  await exportToExcel(rows, '상담세션_' + new Date().toISOString().slice(0,10));
+  showToast('엑셀 파일이 다운로드됩니다', 'success');
+}
+</script>
+</body>
+</html>
