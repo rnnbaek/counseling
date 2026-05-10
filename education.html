@@ -7,13 +7,30 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     /* ── 교육 페이지 전용 ── */
+    .edu-page {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - var(--nav-height));
+      overflow: hidden;
+      padding-top: var(--nav-height);
+    }
     .edu-header {
-      position: sticky;
-      top: var(--nav-height);
+      flex-shrink: 0;
       background: var(--bg);
-      z-index: 50;
-      padding: 1.25rem 0 0.75rem;
+      padding: 1.1rem 0 0.75rem;
       border-bottom: 1px solid var(--border);
+    }
+    .edu-main-area {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #edu-main {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
     .edu-controls {
       display: flex;
@@ -70,7 +87,7 @@
     .tag-chip.active { background: #5865A8; color: white; }
 
     /* ── 그리드 모드 ── */
-    .edu-grid { padding: 1.5rem 0 3rem; }
+    .edu-grid { overflow-y: auto; flex: 1; padding: 1.5rem 0 3rem; }
     .posts-grid-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -80,7 +97,8 @@
     /* ── 분할 모드 ── */
     .edu-split-wrapper {
       display: flex;
-      height: calc(100vh - var(--nav-height) - 130px);
+      flex: 1;
+      overflow: hidden;
     }
     .edu-split-left {
       width: 300px;
@@ -210,8 +228,8 @@
 
     @media (max-width: 900px) {
       .posts-grid-3 { grid-template-columns: repeat(2, 1fr); }
-      .edu-split-wrapper { flex-direction: column; height: auto; }
-      .edu-split-left { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); max-height: 220px; }
+      .edu-split-wrapper { flex-direction: column; }
+      .edu-split-left { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); max-height: 200px; }
     }
     @media (max-width: 600px) {
       .posts-grid-3 { grid-template-columns: 1fr; }
@@ -234,39 +252,41 @@
   </div>
 </nav>
 
-<!-- 상단 고정 헤더 -->
-<div class="edu-header">
-  <div class="container">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
-      <div>
-        <h1 style="font-size:1.35rem; font-weight:800; letter-spacing:-0.02em;">교육 아카이브</h1>
-        <p style="font-size:0.82rem; color:var(--text-light); margin-top:0.15rem;">교육 노트, PDF, 이미지, 음성 녹음을 관리하세요</p>
+<div class="edu-page">
+  <!-- 상단 헤더 (fixed height) -->
+  <div class="edu-header">
+    <div class="container">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+        <div>
+          <h1 style="font-size:1.35rem; font-weight:800; letter-spacing:-0.02em;">교육 아카이브</h1>
+          <p style="font-size:0.82rem; color:var(--text-light); margin-top:0.15rem;">교육 노트, PDF, 이미지, 음성 녹음을 관리하세요</p>
+        </div>
+        <button class="btn btn-primary nav-auth" style="display:none;" onclick="openNewPost()">+ 게시글 작성</button>
       </div>
-      <button class="btn btn-primary nav-auth" style="display:none;" onclick="openNewPost()">+ 게시글 작성</button>
+      <div class="edu-controls">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="search" id="search-input" placeholder="제목, 내용, 태그 검색..." oninput="onSearch(this.value)" />
+        </div>
+        <div class="filter-pills" id="filter-pills">
+          <button class="filter-pill active" onclick="filterCategory('')" data-cat="">전체</button>
+          <button class="filter-pill" onclick="filterCategory('ACT')" data-cat="ACT">ACT</button>
+          <button class="filter-pill" onclick="filterCategory('DBT')" data-cat="DBT">DBT</button>
+          <button class="filter-pill" onclick="filterCategory('CBT')" data-cat="CBT">CBT</button>
+          <button class="filter-pill" onclick="filterCategory('정신역동')" data-cat="정신역동">정신역동</button>
+          <button class="filter-pill" onclick="filterCategory('기타')" data-cat="기타">기타</button>
+        </div>
+      </div>
+      <div class="tag-filter-bar" id="tag-filter-bar" style="display:none;"></div>
     </div>
-    <!-- 검색 + 필터 -->
-    <div class="edu-controls">
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="search" id="search-input" placeholder="제목, 내용, 태그 검색..." oninput="onSearch(this.value)" />
-      </div>
-      <div class="filter-pills" id="filter-pills">
-        <button class="filter-pill active" onclick="filterCategory('')" data-cat="">전체</button>
-        <button class="filter-pill" onclick="filterCategory('ACT')" data-cat="ACT">ACT</button>
-        <button class="filter-pill" onclick="filterCategory('DBT')" data-cat="DBT">DBT</button>
-        <button class="filter-pill" onclick="filterCategory('CBT')" data-cat="CBT">CBT</button>
-        <button class="filter-pill" onclick="filterCategory('정신역동')" data-cat="정신역동">정신역동</button>
-        <button class="filter-pill" onclick="filterCategory('기타')" data-cat="기타">기타</button>
-      </div>
-    </div>
-    <!-- 태그 필터 바 (태그 있을 때만 표시) -->
-    <div class="tag-filter-bar" id="tag-filter-bar" style="display:none;"></div>
   </div>
-</div>
 
-<!-- 메인 콘텐츠 -->
-<div class="container" id="edu-main">
-  <div class="loading" style="padding:4rem;"><div class="spinner"></div></div>
+  <!-- 메인 콘텐츠 (나머지 높이 채움) -->
+  <div class="edu-main-area">
+    <div class="container" id="edu-main" style="padding-left:1.5rem; padding-right:1.5rem;">
+      <div class="loading" style="padding:4rem;"><div class="spinner"></div></div>
+    </div>
+  </div>
 </div>
 
 <!-- ── 게시글 작성/수정 모달 ── -->
@@ -438,7 +458,7 @@ function renderLayout() {
 // 그리드 뷰
 function renderGridView(fp, main) {
   if (fp.length === 0) {
-    main.innerHTML = `<div class="empty-state" style="padding:5rem 0;"><div class="empty-icon">📚</div><h3>게시글이 없어요</h3><p>${isLoggedIn ? '+ 게시글 작성 버튼으로 첫 게시글을 써보세요.' : '아직 공개된 자료가 없습니다.'}</p></div>`;
+    main.innerHTML = `<div class="empty-state" style="padding:5rem 0; flex:1;"><div class="empty-icon">📚</div><h3>게시글이 없어요</h3><p>${isLoggedIn ? '+ 게시글 작성 버튼으로 첫 게시글을 써보세요.' : '아직 공개된 자료가 없습니다.'}</p></div>`;
     return;
   }
   main.innerHTML = `<div class="edu-grid"><div class="posts-grid-3">${fp.map(p => postCardHtml(p, false)).join('')}</div></div>`;

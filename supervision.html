@@ -7,17 +7,23 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     /* 내담자 그룹 */
-    .client-group { margin-bottom: 2rem; }
-    .client-group-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; padding-bottom: 0.6rem; border-bottom: 2px solid var(--primary-light); }
+    .client-group { margin-bottom: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+    .client-group-header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--surface-2); }
     .client-group-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 800; flex-shrink: 0; }
-    .client-group-name { font-size: 1rem; font-weight: 800; color: var(--text); }
-    .client-group-count { font-size: 0.78rem; color: var(--text-light); background: var(--bg); padding: 0.15rem 0.5rem; border-radius: 20px; }
-    .sv-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem 1.25rem; margin-bottom: 0.6rem; cursor: pointer; transition: all 0.15s; }
-    .sv-item:hover { border-color: var(--primary); box-shadow: var(--shadow); }
-    .sv-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.5rem; }
-    .sv-item-session { font-size: 0.78rem; font-weight: 700; color: var(--primary); background: var(--primary-light); padding: 0.15rem 0.5rem; border-radius: 20px; }
-    .sv-item-meta { font-size: 0.78rem; color: var(--text-light); text-align: right; line-height: 1.5; }
-    .sv-item-preview { font-size: 0.875rem; color: var(--text-light); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.6; }
+    .client-group-name { font-size: 0.95rem; font-weight: 800; color: var(--text); }
+    .client-group-count { font-size: 0.75rem; color: var(--text-light); background: var(--bg); padding: 0.15rem 0.5rem; border-radius: 20px; margin-left: auto; }
+
+    /* 회기 탭 */
+    .sv-tabs { display: flex; gap: 0.4rem; padding: 0.75rem 1.25rem; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--bg); overflow-x: auto; }
+    .sv-tab { padding: 0.3rem 0.9rem; border-radius: 20px; font-size: 0.8rem; font-weight: 700; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-light); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .sv-tab:hover { border-color: var(--primary); color: var(--primary); }
+    .sv-tab.active { background: var(--primary); border-color: var(--primary); color: white; }
+
+    /* 슈퍼비전 콘텐츠 영역 */
+    .sv-content-area { padding: 1.25rem; }
+    .sv-content-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; gap: 1rem; }
+    .sv-content-meta { font-size: 0.78rem; color: var(--text-light); display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .sv-content-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 
     /* 인라인 회기 추가 */
     .inline-session-form { background: var(--bg); border: 1.5px dashed var(--primary); border-radius: var(--radius-xs); padding: 1rem; margin-top: 0.5rem; display: none; }
@@ -146,21 +152,6 @@
   </div>
 </div>
 
-<!-- VIEW SUPERVISION MODAL -->
-<div class="modal-overlay" id="view-supervision-modal">
-  <div class="modal" style="max-width:680px;">
-    <div class="modal-header">
-      <div class="modal-title" id="view-supervision-title">슈퍼비전 상세</div>
-      <button class="modal-close" onclick="closeModal('view-supervision-modal')">✕</button>
-    </div>
-    <div class="modal-body" id="view-supervision-body"></div>
-    <div class="modal-footer">
-      <button class="btn btn-danger btn-sm" id="delete-supervision-btn">삭제</button>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('view-supervision-modal')">닫기</button>
-      <button class="btn btn-primary btn-sm" id="edit-supervision-btn">수정</button>
-    </div>
-  </div>
-</div>
 
 <div class="toast-container" id="toast-container"></div>
 
@@ -170,6 +161,7 @@
 let supervisions = [];
 let clients = [];
 let currentFilterClientId = '';
+let selectedSvPerClient = {}; // clientKey → supervisionId
 
 (async () => {
   const session = await requireAuth();
@@ -234,18 +226,19 @@ function renderSupervisions() {
   list.innerHTML = Object.entries(groups).map(([key, group]) => {
     const name = group.client?.name || '내담자 미지정';
     const initial = name.charAt(0).toUpperCase();
-    const itemsHtml = group.items.map(s => `
-      <div class="sv-item" onclick="viewSupervision('${s.id}')">
-        <div class="sv-item-top">
-          <div style="display:flex; align-items:center; gap:0.5rem;">
-            ${s.sessions ? `<span class="sv-item-session">${s.sessions.session_number}회기 · ${formatDateShort(s.sessions.date)}</span>` : ''}
-            ${s.supervisor_name ? `<span style="font-size:0.78rem; color:var(--text-light);">${esc(s.supervisor_name)}</span>` : ''}
-          </div>
-          <div class="sv-item-meta">${formatDate(s.date)}</div>
-        </div>
-        <div class="sv-item-preview">${esc(s.content || '내용 없음')}</div>
-      </div>
-    `).join('');
+    // 선택된 슈퍼비전 (없으면 첫 번째)
+    const selId = selectedSvPerClient[key] || group.items[0]?.id;
+    const selSv = group.items.find(s => s.id === selId) || group.items[0];
+
+    // 회기 탭
+    const tabsHtml = group.items.map(s => {
+      const label = s.sessions ? `${s.sessions.session_number}회기` : formatDateShort(s.date);
+      return `<button class="sv-tab ${s.id === selId ? 'active' : ''}"
+        onclick="selectSvTab('${key}', '${s.id}')">${label}</button>`;
+    }).join('');
+
+    // 선택된 슈퍼비전 내용
+    const contentHtml = selSv ? svContentHtml(key, selSv) : '';
 
     return `
       <div class="client-group">
@@ -254,34 +247,56 @@ function renderSupervisions() {
           <div class="client-group-name">${esc(name)}</div>
           <span class="client-group-count">${group.items.length}건</span>
         </div>
-        ${itemsHtml}
+        <div class="sv-tabs">${tabsHtml}</div>
+        <div class="sv-content-area" id="sv-content-${key}">${contentHtml}</div>
       </div>
     `;
   }).join('');
 }
 
+function svContentHtml(key, s) {
+  return `
+    <div class="sv-content-header">
+      <div class="sv-content-meta">
+        <span>📅 ${formatDate(s.date)}</span>
+        ${s.sessions ? `<span>🔗 ${s.sessions.session_number}회기 (${formatDateShort(s.sessions.date)})</span>` : ''}
+        ${s.supervisor_name ? `<span>👤 ${esc(s.supervisor_name)}</span>` : ''}
+      </div>
+      <div class="sv-content-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editSupervisionById('${s.id}')">✏️ 수정</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDelete('${s.id}')">삭제</button>
+      </div>
+    </div>
+    ${s.content ? `<div class="detail-section"><div class="detail-label">슈퍼비전 내용</div><div class="detail-content">${esc(s.content)}</div></div>` : ''}
+    ${s.feedback ? `<div class="detail-section"><div class="detail-label">피드백</div><div class="detail-content">${esc(s.feedback)}</div></div>` : ''}
+    ${s.action_items ? `<div class="detail-section"><div class="detail-label">실행 항목</div><div class="detail-content">${esc(s.action_items)}</div></div>` : ''}
+    ${!s.content && !s.feedback && !s.action_items ? `<p style="color:var(--text-light); font-size:0.875rem;">내용 없음</p>` : ''}
+  `;
+}
+
+function selectSvTab(key, svId) {
+  selectedSvPerClient[key] = svId;
+  // 해당 그룹 탭과 콘텐츠만 업데이트
+  const group = document.getElementById(`sv-content-${key}`)?.closest('.client-group');
+  if (!group) return;
+  // 탭 active 상태 업데이트
+  group.querySelectorAll('.sv-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${svId}'`));
+  });
+  // 콘텐츠 업데이트
+  const sv = supervisions.find(s => s.id === svId);
+  const contentEl = document.getElementById(`sv-content-${key}`);
+  if (sv && contentEl) contentEl.innerHTML = svContentHtml(key, sv);
+}
+
+function editSupervisionById(id) {
+  const s = supervisions.find(x => x.id === id);
+  if (s) editSupervision(s);
+}
+
 function filterByClient() {
   currentFilterClientId = document.getElementById('filter-client').value;
   loadSupervisions(currentFilterClientId);
-}
-
-function viewSupervision(id) {
-  const s = supervisions.find(x => x.id === id);
-  if (!s) return;
-
-  document.getElementById('view-supervision-title').textContent =
-    `슈퍼비전 · ${formatDate(s.date)}${s.clients ? ' · ' + s.clients.name : ''}`;
-  document.getElementById('view-supervision-body').innerHTML = `
-    ${s.clients ? field('내담자', s.clients.name) : ''}
-    ${s.sessions ? field('관련 회기', `${s.sessions.session_number}회기 (${formatDate(s.sessions.date)})`) : ''}
-    ${field('슈퍼바이저', s.supervisor_name)}
-    ${field('슈퍼비전 내용', s.content)}
-    ${field('피드백', s.feedback)}
-    ${field('실행 항목', s.action_items)}
-  `;
-  document.getElementById('edit-supervision-btn').onclick = () => { closeModal('view-supervision-modal'); editSupervision(s); };
-  document.getElementById('delete-supervision-btn').onclick = () => confirmDelete(id);
-  openModal('view-supervision-modal');
 }
 
 function field(label, value) {
@@ -412,7 +427,10 @@ async function confirmDelete(id) {
   const { error } = await sb.from('supervisions').delete().eq('id', id);
   if (error) { showToast('삭제 실패', 'error'); return; }
   showToast('삭제되었습니다');
-  closeModal('view-supervision-modal');
+  // 삭제된 항목의 선택 초기화
+  Object.keys(selectedSvPerClient).forEach(k => {
+    if (selectedSvPerClient[k] === id) delete selectedSvPerClient[k];
+  });
   await loadSupervisions(currentFilterClientId);
 }
 
