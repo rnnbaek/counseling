@@ -5,6 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>슈퍼비전 · 상담 아카이브</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* 내담자 그룹 */
+    .client-group { margin-bottom: 2rem; }
+    .client-group-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; padding-bottom: 0.6rem; border-bottom: 2px solid var(--primary-light); }
+    .client-group-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 800; flex-shrink: 0; }
+    .client-group-name { font-size: 1rem; font-weight: 800; color: var(--text); }
+    .client-group-count { font-size: 0.78rem; color: var(--text-light); background: var(--bg); padding: 0.15rem 0.5rem; border-radius: 20px; }
+    .sv-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem 1.25rem; margin-bottom: 0.6rem; cursor: pointer; transition: all 0.15s; }
+    .sv-item:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+    .sv-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.5rem; }
+    .sv-item-session { font-size: 0.78rem; font-weight: 700; color: var(--primary); background: var(--primary-light); padding: 0.15rem 0.5rem; border-radius: 20px; }
+    .sv-item-meta { font-size: 0.78rem; color: var(--text-light); text-align: right; line-height: 1.5; }
+    .sv-item-preview { font-size: 0.875rem; color: var(--text-light); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.6; }
+
+    /* 인라인 회기 추가 */
+    .inline-session-form { background: var(--bg); border: 1.5px dashed var(--primary); border-radius: var(--radius-xs); padding: 1rem; margin-top: 0.5rem; display: none; }
+    .inline-session-form.open { display: block; }
+    .inline-form-title { font-size: 0.8rem; font-weight: 800; color: var(--primary); margin-bottom: 0.75rem; }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
@@ -37,7 +56,7 @@
     </div>
 
     <!-- STATS -->
-    <div class="stats-grid" id="stats-grid">
+    <div class="stats-grid">
       <div class="stat-card"><div class="stat-value" id="stat-total">-</div><div class="stat-label">전체 슈퍼비전</div></div>
       <div class="stat-card"><div class="stat-value" id="stat-clients">-</div><div class="stat-label">슈퍼비전 받은 내담자</div></div>
       <div class="stat-card"><div class="stat-value" id="stat-recent">-</div><div class="stat-label">최근 30일</div></div>
@@ -67,9 +86,34 @@
         </div>
         <div class="form-group">
           <label class="form-label">관련 회기</label>
-          <select id="supervision-session" class="form-select">
-            <option value="">회기 선택 (선택사항)</option>
-          </select>
+          <div style="display:flex; gap:0.4rem; align-items:center;">
+            <select id="supervision-session" class="form-select" style="flex:1;">
+              <option value="">회기 선택 (선택사항)</option>
+            </select>
+            <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0; white-space:nowrap;" onclick="toggleInlineSessionForm()" title="회기 추가">+ 회기</button>
+          </div>
+          <!-- 인라인 회기 추가 폼 -->
+          <div class="inline-session-form" id="inline-session-form">
+            <div class="inline-form-title">📋 새 회기 추가</div>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0.6rem;">
+                <label class="form-label">회기 번호</label>
+                <input type="number" id="inline-session-number" class="form-input" placeholder="예: 30" min="1" />
+              </div>
+              <div class="form-group" style="margin-bottom:0.6rem;">
+                <label class="form-label">날짜</label>
+                <input type="date" id="inline-session-date" class="form-input" />
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0.6rem;">
+              <label class="form-label">회기 내용 (선택)</label>
+              <textarea id="inline-session-content" class="form-textarea" rows="2" placeholder="간단히 메모"></textarea>
+            </div>
+            <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="toggleInlineSessionForm()">취소</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="saveInlineSession()">회기 저장</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -126,28 +170,26 @@
 let supervisions = [];
 let clients = [];
 let currentFilterClientId = '';
-let currentSupervisionId = null;
 
 (async () => {
   const session = await requireAuth();
   if (!session) return;
   await Promise.all([loadClients(), loadSupervisions()]);
   document.getElementById('supervision-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('inline-session-date').value = new Date().toISOString().split('T')[0];
 })();
 
 async function loadClients() {
   const { data } = await sb.from('clients').select('id,name').order('name');
   clients = data || [];
-  const selects = ['filter-client', 'supervision-client'];
-  selects.forEach(id => {
+  ['filter-client', 'supervision-client'].forEach(id => {
     const el = document.getElementById(id);
-    const firstOpt = el.options[0];
+    const first = el.options[0];
     el.innerHTML = '';
-    el.appendChild(firstOpt);
+    el.appendChild(first);
     clients.forEach(c => {
       const opt = document.createElement('option');
-      opt.value = c.id;
-      opt.textContent = c.name;
+      opt.value = c.id; opt.textContent = c.name;
       el.appendChild(opt);
     });
   });
@@ -169,10 +211,8 @@ function updateStats() {
   document.getElementById('stat-total').textContent = supervisions.length;
   const clientIds = new Set(supervisions.map(s => s.client_id).filter(Boolean));
   document.getElementById('stat-clients').textContent = clientIds.size;
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const recent = supervisions.filter(s => new Date(s.date) >= thirtyDaysAgo);
-  document.getElementById('stat-recent').textContent = recent.length;
+  const ago30 = new Date(); ago30.setDate(ago30.getDate() - 30);
+  document.getElementById('stat-recent').textContent = supervisions.filter(s => new Date(s.date) >= ago30).length;
 }
 
 function renderSupervisions() {
@@ -181,21 +221,43 @@ function renderSupervisions() {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">💬</div><h3>슈퍼비전 기록이 없어요</h3><p>+ 슈퍼비전 추가 버튼으로 기록을 시작하세요.</p></div>`;
     return;
   }
-  list.innerHTML = `<div class="supervision-list">` + supervisions.map(s => `
-    <div class="supervision-card" onclick="viewSupervision('${s.id}')">
-      <div class="supervision-top">
-        <div>
-          ${s.clients ? `<div class="supervision-client">👤 ${esc(s.clients.name)}</div>` : ''}
-          ${s.sessions ? `<div style="font-size:0.78rem; color:var(--text-light); margin-top:0.2rem;">${s.sessions.session_number}회기 · ${formatDateShort(s.sessions.date)}</div>` : ''}
+
+  // 내담자별 그룹핑
+  const groups = {};
+  const noClientKey = '__none__';
+  supervisions.forEach(s => {
+    const key = s.client_id || noClientKey;
+    if (!groups[key]) groups[key] = { client: s.clients, items: [] };
+    groups[key].items.push(s);
+  });
+
+  list.innerHTML = Object.entries(groups).map(([key, group]) => {
+    const name = group.client?.name || '내담자 미지정';
+    const initial = name.charAt(0).toUpperCase();
+    const itemsHtml = group.items.map(s => `
+      <div class="sv-item" onclick="viewSupervision('${s.id}')">
+        <div class="sv-item-top">
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            ${s.sessions ? `<span class="sv-item-session">${s.sessions.session_number}회기 · ${formatDateShort(s.sessions.date)}</span>` : ''}
+            ${s.supervisor_name ? `<span style="font-size:0.78rem; color:var(--text-light);">${esc(s.supervisor_name)}</span>` : ''}
+          </div>
+          <div class="sv-item-meta">${formatDate(s.date)}</div>
         </div>
-        <div style="text-align:right;">
-          <div class="supervision-date">${formatDate(s.date)}</div>
-          ${s.supervisor_name ? `<div class="supervision-supervisor">${esc(s.supervisor_name)}</div>` : ''}
-        </div>
+        <div class="sv-item-preview">${esc(s.content || '내용 없음')}</div>
       </div>
-      <div class="supervision-preview">${esc(s.content || '내용 없음')}</div>
-    </div>
-  `).join('') + `</div>`;
+    `).join('');
+
+    return `
+      <div class="client-group">
+        <div class="client-group-header">
+          <div class="client-group-avatar">${initial}</div>
+          <div class="client-group-name">${esc(name)}</div>
+          <span class="client-group-count">${group.items.length}건</span>
+        </div>
+        ${itemsHtml}
+      </div>
+    `;
+  }).join('');
 }
 
 function filterByClient() {
@@ -204,13 +266,11 @@ function filterByClient() {
 }
 
 function viewSupervision(id) {
-  currentSupervisionId = id;
   const s = supervisions.find(x => x.id === id);
   if (!s) return;
 
   document.getElementById('view-supervision-title').textContent =
     `슈퍼비전 · ${formatDate(s.date)}${s.clients ? ' · ' + s.clients.name : ''}`;
-
   document.getElementById('view-supervision-body').innerHTML = `
     ${s.clients ? field('내담자', s.clients.name) : ''}
     ${s.sessions ? field('관련 회기', `${s.sessions.session_number}회기 (${formatDate(s.sessions.date)})`) : ''}
@@ -219,7 +279,6 @@ function viewSupervision(id) {
     ${field('피드백', s.feedback)}
     ${field('실행 항목', s.action_items)}
   `;
-
   document.getElementById('edit-supervision-btn').onclick = () => { closeModal('view-supervision-modal'); editSupervision(s); };
   document.getElementById('delete-supervision-btn').onclick = () => confirmDelete(id);
   openModal('view-supervision-modal');
@@ -230,18 +289,56 @@ function field(label, value) {
   return `<div class="detail-section"><div class="detail-label">${label}</div><div class="detail-content">${esc(value)}</div></div>`;
 }
 
+// 회기 드롭다운 로드
 async function loadSessionsForSupervision() {
   const clientId = document.getElementById('supervision-client').value;
   const select = document.getElementById('supervision-session');
   select.innerHTML = '<option value="">회기 선택 (선택사항)</option>';
   if (!clientId) return;
-  const { data } = await sb.from('sessions').select('id, session_number, date').eq('client_id', clientId).order('session_number', { ascending: false });
+  const { data } = await sb.from('sessions').select('id,session_number,date').eq('client_id', clientId).order('session_number', { ascending: false });
   (data || []).forEach(s => {
     const opt = document.createElement('option');
     opt.value = s.id;
     opt.textContent = `${s.session_number}회기 (${formatDateShort(s.date)})`;
     select.appendChild(opt);
   });
+}
+
+// 인라인 회기 추가 폼 토글
+function toggleInlineSessionForm() {
+  const form = document.getElementById('inline-session-form');
+  form.classList.toggle('open');
+  if (form.classList.contains('open')) {
+    document.getElementById('inline-session-number').focus();
+  }
+}
+
+// 인라인 회기 저장
+async function saveInlineSession() {
+  const clientId = document.getElementById('supervision-client').value;
+  if (!clientId) { showToast('먼저 내담자를 선택하세요', 'error'); return; }
+
+  const num = parseInt(document.getElementById('inline-session-number').value);
+  const date = document.getElementById('inline-session-date').value;
+  if (!num || !date) { showToast('회기 번호와 날짜를 입력하세요', 'error'); return; }
+
+  const { data, error } = await sb.from('sessions').insert({
+    client_id: clientId,
+    session_number: num,
+    date,
+    content: document.getElementById('inline-session-content').value,
+  }).select().single();
+
+  if (error) { showToast('회기 저장 실패: ' + error.message, 'error'); return; }
+
+  showToast(`${num}회기가 추가되었습니다`, 'success');
+  // 드롭다운 새로고침 후 새 회기 선택
+  await loadSessionsForSupervision();
+  document.getElementById('supervision-session').value = data.id;
+  // 폼 초기화 및 닫기
+  document.getElementById('inline-session-number').value = '';
+  document.getElementById('inline-session-content').value = '';
+  document.getElementById('inline-session-form').classList.remove('open');
 }
 
 function openAddSupervision() {
@@ -270,13 +367,10 @@ async function saveSupervision() {
   if (!date) { showToast('날짜를 입력하세요', 'error'); return; }
 
   const { data: { user } } = await sb.auth.getUser();
-  const clientId = document.getElementById('supervision-client').value;
-  const sessionId = document.getElementById('supervision-session').value;
-
   const payload = {
     user_id: user.id,
-    client_id: clientId || null,
-    session_id: sessionId || null,
+    client_id: document.getElementById('supervision-client').value || null,
+    session_id: document.getElementById('supervision-session').value || null,
     date,
     supervisor_name: document.getElementById('supervision-supervisor').value,
     content: document.getElementById('supervision-content').value,
@@ -308,6 +402,9 @@ function resetSupervisionForm() {
   document.getElementById('supervision-content').value = '';
   document.getElementById('supervision-feedback').value = '';
   document.getElementById('supervision-actions').value = '';
+  document.getElementById('inline-session-form').classList.remove('open');
+  document.getElementById('inline-session-number').value = '';
+  document.getElementById('inline-session-content').value = '';
 }
 
 async function confirmDelete(id) {
@@ -322,13 +419,8 @@ async function confirmDelete(id) {
 async function exportSupervisions() {
   if (supervisions.length === 0) { showToast('내보낼 데이터가 없습니다', 'error'); return; }
   const rows = supervisions.map(s => ({
-    날짜: s.date,
-    내담자: s.clients?.name || '',
-    관련회기: s.sessions ? `${s.sessions.session_number}회기` : '',
-    슈퍼바이저: s.supervisor_name || '',
-    내용: s.content || '',
-    피드백: s.feedback || '',
-    실행항목: s.action_items || ''
+    날짜: s.date, 내담자: s.clients?.name || '', 관련회기: s.sessions ? `${s.sessions.session_number}회기` : '',
+    슈퍼바이저: s.supervisor_name || '', 내용: s.content || '', 피드백: s.feedback || '', 실행항목: s.action_items || ''
   }));
   await exportToExcel(rows, '슈퍼비전_' + new Date().toISOString().slice(0,10));
   showToast('엑셀 파일이 다운로드됩니다', 'success');

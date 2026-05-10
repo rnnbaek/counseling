@@ -245,15 +245,23 @@ function renderSessions() {
     body.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>아직 회기가 없어요</h3><p>+ 회기 추가 버튼으로 첫 회기를 기록하세요.</p></div>`;
     return;
   }
-  body.innerHTML = sessions.map(s => `
+  body.innerHTML = sessions.map(s => {
+    const fields = [];
+    if (s.content) fields.push(`<div class="session-field"><span class="session-field-label">내용</span><span class="session-field-val">${esc(s.content)}</span></div>`);
+    if (s.goals) fields.push(`<div class="session-field"><span class="session-field-label">목표</span><span class="session-field-val">${esc(s.goals)}</span></div>`);
+    if (s.homework) fields.push(`<div class="session-field"><span class="session-field-label">과제</span><span class="session-field-val">${esc(s.homework)}</span></div>`);
+    if (s.therapist_notes) fields.push(`<div class="session-field"><span class="session-field-label">메모</span><span class="session-field-val">${esc(s.therapist_notes)}</span></div>`);
+    return `
     <div class="session-card" onclick="viewSession('${s.id}')">
       <div class="session-card-top">
         <span class="session-num">${s.session_number}회기</span>
         <span class="session-date">${formatDate(s.date)}</span>
       </div>
-      <div class="session-preview">${esc(s.content || '내용 없음')}</div>
-    </div>
-  `).join('');
+      <div style="display:flex; flex-direction:column; gap:0.3rem; margin-top:0.5rem;">
+        ${fields.length > 0 ? fields.join('') : '<span style="font-size:0.82rem; color:var(--text-light);">내용 없음</span>'}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function viewSession(id) {
